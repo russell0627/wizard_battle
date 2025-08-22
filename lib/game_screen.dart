@@ -49,8 +49,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
   };
 
   // Helper to get the required level for an element/shape
-  int _getRequiredLevel(dynamic type) =>
-      type is SpellElement ? _elementUnlockLevels[type]! : _shapeUnlockLevels[type]!;
+  int _getRequiredLevel(dynamic type) => type is SpellElement ? _elementUnlockLevels[type]! : _shapeUnlockLevels[type]!;
 
   /// Helper method to get the correct icon for an enemy type.
   IconData _getEnemyIcon(EnemyType type) {
@@ -92,8 +91,9 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
 
     // Get the tiles affected by the currently selected spell for UI highlighting
     // The AOE is now calculated based on the hovered tile.
-    final Set<(int, int)> affectedSpellTiles =
-        gameController.getAffectedTilesForCurrentSpell(targetPosition: _hoveredTile);
+    final Set<(int, int)> affectedSpellTiles = gameController.getAffectedTilesForCurrentSpell(
+      targetPosition: _hoveredTile,
+    );
 
     // --- UI PREVIEW CALCULATION ---
     // Calculate Ogre stomp preview tiles
@@ -144,7 +144,8 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
               foregroundColor: Colors.white, // White text for AppBar
             ),
             body: Center(
-              child: Row( // Changed from Column to Row for horizontal layout
+              child: Row(
+                // Changed from Column to Row for horizontal layout
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start, // Align content to the top
                 children: [
@@ -212,9 +213,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: gridSize * gridSize,
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: gridSize,
-                      ),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: gridSize),
                       itemBuilder: (context, index) {
                         final x = index % gridSize;
                         final y = index ~/ gridSize;
@@ -235,89 +234,129 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                           onExit: (_) => setState(() => _hoveredTile = null),
                           child: GestureDetector(
                             onTap: () => gameController.castSpellAt(x, y),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: isVisible
-                                      ? Colors.grey.shade200
-                                      : Colors.grey.shade800,
-                                  width: isVisible ? 1.0 : 0.5,
+                            child: Tooltip(
+                              // Only show tooltip if tile is visible and contains an enemy
+                              message: isVisible && enemyOnTile != null
+                                  ? 'Type: ${enemyOnTile.type.name}\nHealth: ${enemyOnTile.health}'
+                                  : '',
+                              waitDuration: const Duration(milliseconds: 500), // Optional: delay before showing
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: isVisible ? Colors.grey.shade200 : Colors.grey.shade800,
+                                    width: isVisible ? 1.0 : 0.5,
+                                  ),
+                                  color:
+                                      spaceType ==
+                                          SpaceType
+                                              .obstacle // Obstacle color
+                                      ? Colors.grey.shade900
+                                      : spaceType == SpaceType.water
+                                      ? Colors.blue.shade800
+                                      : spaceType == SpaceType.forest
+                                      ? Colors.green.shade800
+                                      : spaceType == SpaceType.corpse
+                                      ? Colors.brown.shade800
+                                      : isPlayerPosition // Player color
+                                      ? Colors.blueAccent
+                                      : isVisible &&
+                                            itemOnTile !=
+                                                null // Item color
+                                      ? Colors.orange.shade700
+                                      : isVisible &&
+                                            minionOnTile !=
+                                                null // Minion color
+                                      ? Colors.lightGreen.shade600
+                                      : isVisible &&
+                                            isAffectedBySpell // Spell affected tile color
+                                      ? Colors.blue.withAlpha(77) // A lighter blue for affected tiles
+                                      : isVisible &&
+                                            enemyOnTile !=
+                                                null // Enemy color
+                                      ? Colors
+                                            .redAccent // Distinct color for enemies
+                                      : Colors.grey[800], // Empty cell color
                                 ),
-                                color: spaceType == SpaceType.obstacle // Obstacle color
-                                    ? Colors.grey.shade700
-                                    : spaceType == SpaceType.water
-                                    ? Colors.blue.shade800
-                                    : spaceType == SpaceType.forest
-                                    ? Colors.green.shade800
-                                    : spaceType == SpaceType.corpse
-                                    ? Colors.brown.shade800
-                                    : isPlayerPosition // Player color
-                                        ? Colors.blueAccent
-                                        : isVisible && itemOnTile != null // Item color
-                                            ? Colors.orange.shade700
-                                            : isVisible && minionOnTile != null // Minion color
-                                                ? Colors.lightGreen.shade600
-                                                : isVisible && isAffectedBySpell // Spell affected tile color
-                                                    ? Colors.blue.withAlpha(77) // A lighter blue for affected tiles
-                                                    : isVisible && enemyOnTile != null // Enemy color
-                                                        ? Colors.redAccent // Distinct color for enemies
-                                                        : Colors.grey[800], // Empty cell color
-                              ),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                alignment: Alignment.center,
-                                children: [
-                                  // Render entities only if the tile is visible
-                                  if (isVisible) ...[
-                                    if (isPlayerPosition)
-                                      const Icon(Icons.person, color: Colors.white) // Player
-                                    else if (itemOnTile != null)
-                                      Icon(
-                                          itemOnTile.type == ItemType.healthPotion ? Icons.local_hospital : Icons.auto_awesome,
-                                          color: Colors.white)
-                                    else if (corpseOnTile != null) // Display a "do not disturb" icon for corpses
-                                      const Icon(Icons.do_not_disturb_alt, color: Colors.white70)
-                                    else if (minionOnTile != null || enemyOnTile != null)
-                                      FittedBox(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                if (minionOnTile != null && minionOnTile.type != null)
-                                                  ColorFiltered(
-                                                      colorFilter: const ColorFilter.mode(Colors.greenAccent, BlendMode.modulate),
-                                                      child: Icon(_getEnemyIcon(minionOnTile.type!), color: Colors.white))
-                                                else
-                                                  Icon(minionOnTile != null ? Icons.support : _getEnemyIcon(enemyOnTile!.type), color: Colors.white),
-                                                if (enemyOnTile?.statusEffects.any((e) => e.type == StatusEffectType.burn) ?? false)
-                                                  const Icon(Icons.local_fire_department, color: Colors.orangeAccent, size: 16),
-                                                if (enemyOnTile?.statusEffects.any((e) => e.type == StatusEffectType.frozen) ?? false)
-                                                  const Icon(Icons.ac_unit, color: Colors.lightBlueAccent, size: 16),
-                                              ],
-                                            ),
-                                            Text(
-                                              'HP: ${minionOnTile?.health ?? enemyOnTile?.health}'
-                                              '${enemyOnTile?.weakness != null ? ' W:${enemyOnTile!.weakness!.name[0].toUpperCase()}' : ''}'
-                                              '${enemyOnTile?.resistance != null ? ' R:${enemyOnTile!.resistance!.name[0].toUpperCase()}' : ''}',
-                                              style: const TextStyle(color: Colors.white),
-                                            ),
-                                          ],
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  alignment: Alignment.center,
+                                  children: [
+                                    // Render entities only if the tile is visible
+                                    if (isVisible) ...[
+                                      if (isPlayerPosition)
+                                        const Icon(Icons.person, color: Colors.white) // Player
+                                      else if (itemOnTile != null)
+                                        Icon(
+                                          itemOnTile.type == ItemType.healthPotion
+                                              ? Icons.local_hospital
+                                              : Icons.auto_awesome,
+                                          color: Colors.white,
+                                        )
+                                      else if (corpseOnTile != null) // Display a "do not disturb" icon for corpses
+                                        const Icon(Icons.do_not_disturb_alt, color: Colors.white70)
+                                      else if (minionOnTile != null || enemyOnTile != null)
+                                        FittedBox(
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  if (minionOnTile != null && minionOnTile.type != null)
+                                                    ColorFiltered(
+                                                      colorFilter: const ColorFilter.mode(
+                                                        Colors.greenAccent,
+                                                        BlendMode.modulate,
+                                                      ),
+                                                      child: Icon(
+                                                        _getEnemyIcon(minionOnTile.type!),
+                                                        color: Colors.white,
+                                                      ),
+                                                    )
+                                                  else
+                                                    Icon(
+                                                      minionOnTile != null
+                                                          ? Icons.support
+                                                          : _getEnemyIcon(enemyOnTile!.type),
+                                                      color: Colors.white,
+                                                    ),
+                                                  if (enemyOnTile?.statusEffects.any(
+                                                        (e) => e.type == StatusEffectType.burn,
+                                                      ) ??
+                                                      false)
+                                                    const Icon(
+                                                      Icons.local_fire_department,
+                                                      color: Colors.orangeAccent,
+                                                      size: 16,
+                                                    ),
+                                                  if (enemyOnTile?.statusEffects.any(
+                                                        (e) => e.type == StatusEffectType.frozen,
+                                                      ) ??
+                                                      false)
+                                                    const Icon(Icons.ac_unit, color: Colors.lightBlueAccent, size: 16),
+                                                ],
+                                              ),
+                                              Text(
+                                                'HP: ${minionOnTile?.health ?? enemyOnTile?.health}'
+                                                '${enemyOnTile?.weakness != null ? ' W:${enemyOnTile!.weakness!.name[0].toUpperCase()}' : ''}'
+                                                '${enemyOnTile?.resistance != null ? ' R:${enemyOnTile!.resistance!.name[0].toUpperCase()}' : ''}',
+                                                style: const TextStyle(color: Colors.white),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    // Terrain Effect Icon
-                                    if (gameState.terrainEffects[(x, y)]?.type == TerrainEffectType.burning)
-                                      Container(
-                                        color: Colors.orange.withAlpha(102),
-                                        child: const Icon(Icons.local_fire_department, color: Colors.redAccent),
-                                      ),
+                                      // Terrain Effect Icon
+                                      if (gameState.terrainEffects[(x, y)]?.type == TerrainEffectType.burning)
+                                        Container(
+                                          color: Colors.orange.withAlpha(102),
+                                          child: const Icon(Icons.local_fire_department, color: Colors.redAccent),
+                                        ),
+                                    ],
+                                    // Fog of War Overlay
+                                    if (isVisible && isStompHover) Container(color: Colors.red.withAlpha(80)),
+                                    if (!isVisible) Container(color: Colors.black.withAlpha(150)),
                                   ],
-                                  // Fog of War Overlay
-                                  if (isVisible && isStompHover)
-                                    Container(color: Colors.red.withAlpha(80)),
-                                  if (!isVisible) Container(color: Colors.black.withAlpha(150)),
-                                ],
+                                ),
                               ),
                             ),
                           ),
@@ -327,7 +366,8 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                   ),
                   const SizedBox(width: 16), // Spacer between grid and right UI
                   // Right Side: Other UI elements
-                  Expanded( // Allows the column to take available space
+                  Expanded(
+                    // Allows the column to take available space
                     child: Column(
                       children: [
                         TabBar(
@@ -351,22 +391,56 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Level: ${gameState.player.level}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                                    Text(
+                                      'Level: ${gameState.player.level}',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                     const SizedBox(height: 4),
                                     LinearProgressIndicator(
                                       value: gameState.player.xp / gameState.player.xpToNextLevel,
                                       backgroundColor: Colors.grey.shade700,
                                       valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
                                     ),
-                                    Text('XP: ${gameState.player.xp} / ${gameState.player.xpToNextLevel}', style: const TextStyle(fontSize: 14, color: Colors.white70)),
+                                    Text(
+                                      'XP: ${gameState.player.xp} / ${gameState.player.xpToNextLevel}',
+                                      style: const TextStyle(fontSize: 14, color: Colors.white70),
+                                    ),
                                     const SizedBox(height: 8),
-                                    Text('Player Health: ${gameState.player.health} / ${gameState.player.maxHealth}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                                    Text(
+                                      'Player Health: ${gameState.player.health} / ${gameState.player.maxHealth}',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                     const SizedBox(height: 8),
-                                    Text('Player Mana: ${gameState.player.mana}/${gameState.player.maxMana}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                                    Text(
+                                      'Player Mana: ${gameState.player.mana}/${gameState.player.maxMana}',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                     const SizedBox(height: 8),
-                                    Text('Spell Power: ${gameState.player.spellPower}', style: const TextStyle(fontSize: 16, color: Colors.white)),
+                                    Text(
+                                      'Spell Power: ${gameState.player.spellPower}',
+                                      style: const TextStyle(fontSize: 16, color: Colors.white),
+                                    ),
                                     const SizedBox(height: 8),
-                                    Text('Enemies Remaining: ${gameState.enemies.length}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                                    Text(
+                                      'Enemies Remaining: ${gameState.enemies.length}',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -381,13 +455,19 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                                         child: ElevatedButton(
                                           onPressed: () => gameController.useItem(item),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: item.type == ItemType.healthPotion ? Colors.red.shade700 : Colors.blue.shade700,
+                                            backgroundColor: item.type == ItemType.healthPotion
+                                                ? Colors.red.shade700
+                                                : Colors.blue.shade700,
                                             foregroundColor: Colors.white,
                                           ),
                                           child: Row(
                                             mainAxisAlignment: MainAxisAlignment.center,
                                             children: [
-                                              Icon(item.type == ItemType.healthPotion ? Icons.local_hospital : Icons.auto_awesome),
+                                              Icon(
+                                                item.type == ItemType.healthPotion
+                                                    ? Icons.local_hospital
+                                                    : Icons.auto_awesome,
+                                              ),
                                               const SizedBox(width: 8),
                                               Text(item.type.name.replaceAll(RegExp(r'(?<!^)(?=[A-Z])'), r' ')),
                                             ],
@@ -409,17 +489,29 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                                   alignment: WrapAlignment.center,
                                   children: [
                                     ElevatedButton(
-                                      onPressed: gameState.player.dashCooldown == 0 ? () => gameController.dash(gameState.playerDirection) : null,
-                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white),
-                                      child: Text(gameState.player.dashCooldown == 0 ? 'Dash' : 'Dash CD: ${gameState.player.dashCooldown}'),
-                                    ),
-                                    ElevatedButton(
-                                      onPressed: () => gameController.wait(),
+                                      onPressed: gameState.player.dashCooldown == 0
+                                          ? () => gameController.dash(gameState.playerDirection)
+                                          : null,
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.grey.shade600,
+                                        backgroundColor: Colors.blueGrey,
                                         foregroundColor: Colors.white,
                                       ),
-                                      child: const Text('Wait'),
+                                      child: Text(
+                                        gameState.player.dashCooldown == 0
+                                            ? 'Dash'
+                                            : 'Dash CD: ${gameState.player.dashCooldown}',
+                                      ),
+                                    ),
+                                    Tooltip(
+                                      message: 'Skip turn to recover 40 mana',
+                                      child: ElevatedButton(
+                                        onPressed: () => gameController.focus(),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.indigo.shade400, // A more 'magical' color for focusing
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: const Text('Focus'),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -430,7 +522,10 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                         // Spell Settings (remain outside the tabs)
                         const Padding(
                           padding: EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0),
-                          child: Text('Select Spell:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                          child: Text(
+                            'Select Spell:',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -441,10 +536,18 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                             children: SpellElement.values.map((element) {
                               return ChoiceChip(
                                 label: Text(
-                                  gameState.player.unlockedElements.contains(element) ? element.name : '${element.name} (Lvl ${_getRequiredLevel(element)})',
-                                  style: TextStyle(color: gameState.player.unlockedElements.contains(element) ? Colors.white : Colors.grey),
+                                  gameState.player.unlockedElements.contains(element)
+                                      ? element.name
+                                      : '${element.name} (Lvl ${_getRequiredLevel(element)})',
+                                  style: TextStyle(
+                                    color: gameState.player.unlockedElements.contains(element)
+                                        ? Colors.white
+                                        : Colors.grey,
+                                  ),
                                 ),
-                                backgroundColor: gameState.player.unlockedElements.contains(element) ? Colors.grey[700] : Colors.grey[900],
+                                backgroundColor: gameState.player.unlockedElements.contains(element)
+                                    ? Colors.grey[700]
+                                    : Colors.grey[900],
                                 selectedColor: Colors.blueAccent,
                                 selected: gameState.selectedElement == element,
                                 onSelected: (selected) {
@@ -463,10 +566,18 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                             children: SpellShape.values.map((shape) {
                               return ChoiceChip(
                                 label: Text(
-                                  gameState.player.unlockedSpellShapes.contains(shape) ? shape.name : '${shape.name} (Lvl ${_getRequiredLevel(shape)})',
-                                  style: TextStyle(color: gameState.player.unlockedSpellShapes.contains(shape) ? Colors.white : Colors.grey),
+                                  gameState.player.unlockedSpellShapes.contains(shape)
+                                      ? shape.name
+                                      : '${shape.name} (Lvl ${_getRequiredLevel(shape)})',
+                                  style: TextStyle(
+                                    color: gameState.player.unlockedSpellShapes.contains(shape)
+                                        ? Colors.white
+                                        : Colors.grey,
+                                  ),
                                 ),
-                                backgroundColor: gameState.player.unlockedSpellShapes.contains(shape) ? Colors.grey[700] : Colors.grey[900],
+                                backgroundColor: gameState.player.unlockedSpellShapes.contains(shape)
+                                    ? Colors.grey[700]
+                                    : Colors.grey[900],
                                 selectedColor: Colors.blueAccent,
                                 selected: gameState.selectedSpellShape == shape,
                                 onSelected: (selected) {
@@ -494,13 +605,8 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        gameState.gameStatus == GameStatus.victory
-                            ? 'VICTORY!'
-                            : 'GAME OVER!',
-                        style: const TextStyle(
-                            fontSize: 48,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white),
+                        gameState.gameStatus == GameStatus.victory ? 'VICTORY!' : 'GAME OVER!',
+                        style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton(
@@ -508,8 +614,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 40, vertical: 20),
+                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
                           textStyle: const TextStyle(fontSize: 24),
                         ),
                         child: const Text('Restart Game'),

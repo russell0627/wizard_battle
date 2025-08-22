@@ -14,6 +14,7 @@ const int _dashDistance = 3;
 const int _dashCooldownDuration = 3; // Turns
 const int _burnDamagePerTurn = 5;
 const int _baseXpToNextLevel = 100;
+const int _focusManaRegenAmount = 40;
 const int _freezeDuration = 2; // Turns (enemy misses 1 turn)
 const double _levelXpMultiplier = 1.2;
 const int _healthPotionHealAmount = 30;
@@ -31,6 +32,22 @@ const Map<SpellShape, int> _spellManaCosts = {
   SpellShape.raiseDead: 50, // Raising the dead is very expensive
 };
 
+/// Defines the enemies for each subsequent wave of the game.
+final Map<int, List<Enemy>> _waveDefinitions = {
+  2: const [
+    Enemy(id: 'wave2_1', position: (5, 15), type: EnemyType.archer, health: 40, attackRange: 5, weakness: SpellElement.earth, resistance: SpellElement.air, xpValue: 40),
+    Enemy(id: 'wave2_2', position: (15, 5), type: EnemyType.archer, health: 40, attackRange: 5, weakness: SpellElement.earth, resistance: SpellElement.air, xpValue: 40),
+    Enemy(id: 'wave2_3', position: (10, 10), type: EnemyType.ogre, health: 110, weakness: SpellElement.water, resistance: SpellElement.fire, xpValue: 60),
+  ],
+  3: const [
+    // A final, harder wave
+    Enemy(id: 'wave3_1', position: (18, 18), type: EnemyType.ogre, health: 150, weakness: SpellElement.water, resistance: SpellElement.fire, xpValue: 75),
+    Enemy(id: 'wave3_2', position: (1, 18), type: EnemyType.ogre, health: 150, weakness: SpellElement.water, resistance: SpellElement.fire, xpValue: 75),
+    Enemy(id: 'wave3_3', position: (10, 2), type: EnemyType.goblin, health: 70, weakness: SpellElement.fire, resistance: SpellElement.water, xpValue: 40),
+    Enemy(id: 'wave3_4', position: (12, 2), type: EnemyType.goblin, health: 70, weakness: SpellElement.fire, resistance: SpellElement.water, xpValue: 40),
+  ]
+};
+
 @riverpod
 class GameController extends _$GameController {
   @override
@@ -41,38 +58,13 @@ class GameController extends _$GameController {
       (_) => List.generate(GameState.defaultGridSize, (_) => SpaceType.empty),
     );
 
-    // Add some obstacles for demonstration
-    initialGrid[3][3] = SpaceType.obstacle;
-    initialGrid[3][4] = SpaceType.obstacle;
-    initialGrid[3][5] = SpaceType.obstacle;
-    initialGrid[10][15] = SpaceType.obstacle;
-    initialGrid[11][15] = SpaceType.obstacle;
-    initialGrid[12][15] = SpaceType.obstacle;
-
-    // Add some water and forest tiles
-    for (int i = 5; i < 10; i++) {
-      initialGrid[i][10] = SpaceType.water; // A river
-    }
-    initialGrid[15][5] = SpaceType.forest;
-    initialGrid[16][5] = SpaceType.forest;
-    initialGrid[15][6] = SpaceType.forest;
-
-    // Set the SpaceType for item locations before creating the GameState
-    initialGrid[1][1] = SpaceType.item;
-    initialGrid[8][8] = SpaceType.item;
-    initialGrid[15][15] = SpaceType.item;
+    // Initialize the grid with obstacles, water, and forest
+    _initializeGrid(initialGrid);
 
     // Initialize the game state with some initial enemies
+    final initialEnemies = _generateInitialWave();
     return GameState(
-      enemies: const [
-        // Standard Goblin
-        Enemy(id: 'enemy_1', position: (2, 2), type: EnemyType.goblin, health: 50, weakness: SpellElement.fire, resistance: SpellElement.water, xpValue: 30),
-        // Archer
-        Enemy(id: 'enemy_2', position: (18, 18), type: EnemyType.archer, health: 35, attackRange: 5, weakness: SpellElement.earth, resistance: SpellElement.air, xpValue: 35),
-        // Ogre
-        Enemy(id: 'enemy_3', position: (5, 1), type: EnemyType.ogre, health: 100, weakness: SpellElement.water, resistance: SpellElement.fire, xpValue: 50),
-      ],
-      // Place items on the grid
+      enemies: initialEnemies,
       player: const Player(
         unlockedElements: {SpellElement.fire}, // Only Fire unlocked initially
         unlockedSpellShapes: {SpellShape.ball}, // Only Ball unlocked initially
@@ -82,6 +74,7 @@ class GameController extends _$GameController {
         (8, 8): Item(id: 'item_mp_1', type: ItemType.manaPotion),
         (15, 15): Item(id: 'item_hp_2', type: ItemType.healthPotion),
       },
+      // Note: initialGrid is already set up with obstacles, water, forest, and initial items.
       grid: initialGrid,
     );
   }
@@ -151,7 +144,7 @@ class GameController extends _$GameController {
     }
 
     // After the player moves, move the enemies
-    _processNonPlayerTurns();
+    _processNonPlayerTurns(isFocusing: false);
   }
 
   /// Allows the player to dash a short distance in a given direction.
@@ -195,7 +188,7 @@ class GameController extends _$GameController {
       ),
     );
 
-    _processNonPlayerTurns();
+    _processNonPlayerTurns(isFocusing: false);
   }
 
   /// Allows the player to use an item from their inventory.
@@ -224,18 +217,18 @@ class GameController extends _$GameController {
     }
 
     state = state.copyWith(player: updatedPlayer);
-    _processNonPlayerTurns(); // Using an item consumes a turn
+    _processNonPlayerTurns(isFocusing: false); // Using an item consumes a turn
   }
 
-  /// Allows the player to wait, passing their turn.
-  void wait() {
+  /// Allows the player to focus, skipping their turn to regain a large amount of mana.
+  void focus() {
     if (state.gameStatus != GameStatus.playing) return;
 
-    _processNonPlayerTurns();
+    _processNonPlayerTurns(isFocusing: true);
   }
 
   /// Processes the turns for all non-player characters (minions and enemies).
-  void _processNonPlayerTurns() {
+  void _processNonPlayerTurns({required bool isFocusing}) {
     // Do not process turns if the game is already over.
     if (state.gameStatus != GameStatus.playing) return;
 
@@ -499,19 +492,15 @@ class GameController extends _$GameController {
       nextStatus = GameStatus.gameOver;
     }
 
-    // Regenerate player mana
-    player = player.copyWith(mana: (player.mana + _manaRegenPerTurn).clamp(0, player.maxMana));
+    // Regenerate player mana. Focusing provides a larger boost.
+    final manaToRegen = isFocusing ? _focusManaRegenAmount : _manaRegenPerTurn;
+    player = player.copyWith(mana: (player.mana + manaToRegen).clamp(0, player.maxMana));
 
     // Decrement dash cooldown
     if (player.dashCooldown > 0) {
       player = player.copyWith(dashCooldown: player.dashCooldown - 1);
     }
 
-    // Check for victory
-    if (processedEnemies.isEmpty && state.enemies.isNotEmpty) {
-      nextStatus = GameStatus.victory;
-    }
-    
     // Update state once with all changes to health, mana, and enemies.
     state = state.copyWith(
       enemies: processedEnemies,
@@ -523,6 +512,11 @@ class GameController extends _$GameController {
       grid: deathProcessingResult.newGrid,
       gameStatus: nextStatus,
     );
+
+    // NEW: Check for wave completion after the turn has fully resolved.
+    if (state.enemies.isEmpty && state.gameStatus == GameStatus.playing) {
+      _startNextWave();
+    }
   }
 
   /// Updates the player's selected spell element.
@@ -666,17 +660,11 @@ class GameController extends _$GameController {
       final deathProcessingResult =
           _processDeaths(defeatedThisCast, state.itemsOnGrid, state.corpsesOnGrid, state.grid);
 
-      GameStatus nextStatus = state.gameStatus;
-      if (remainingEnemies.isEmpty) {
-        nextStatus = GameStatus.victory;
-      }
-
       final playerAfterLevelUp = _processLevelUp(state.player, xpFromThisSpell);
 
       state = state.copyWith(
         enemies: remainingEnemies,
         terrainEffects: newTerrainEffects,
-        gameStatus: nextStatus,
         player: playerAfterLevelUp.copyWith(mana: newMana),
         itemsOnGrid: deathProcessingResult.newItemsOnGrid,
         corpsesOnGrid: deathProcessingResult.newCorpsesOnGrid,
@@ -684,7 +672,7 @@ class GameController extends _$GameController {
       );
     }
 
-    _processNonPlayerTurns();
+    _processNonPlayerTurns(isFocusing: false);
   }
   
   /// Resets the game to its initial state.
@@ -954,5 +942,79 @@ class GameController extends _$GameController {
       }
     }
     return updatedEnemies;
+  }
+
+  /// Initializes the grid with obstacles, water, forest, and items.
+  void _initializeGrid(List<List<SpaceType>> grid) {
+    // Add some obstacles for demonstration
+    grid[3][3] = SpaceType.obstacle;
+    grid[3][4] = SpaceType.obstacle;
+    grid[3][5] = SpaceType.obstacle;
+    grid[10][15] = SpaceType.obstacle;
+    grid[11][15] = SpaceType.obstacle;
+    grid[12][15] = SpaceType.obstacle;
+
+    // Add some water and forest tiles
+    for (int i = 5; i < 10; i++) {
+      grid[i][10] = SpaceType.water; // A river
+    }
+    grid[15][5] = SpaceType.forest;
+    grid[16][5] = SpaceType.forest;
+    grid[15][6] = SpaceType.forest;
+
+    // Set the SpaceType for item locations before creating the GameState
+    grid[1][1] = SpaceType.item;
+    grid[8][8] = SpaceType.item;
+    grid[15][15] = SpaceType.item;
+  }
+
+  /// Generates the initial wave of enemies for the game.
+  List<Enemy> _generateInitialWave() {
+    return const [
+      Enemy(id: 'enemy_1', position: (8, 5), type: EnemyType.goblin, health: 50, weakness: SpellElement.fire, resistance: SpellElement.water, xpValue: 30),
+      Enemy(id: 'enemy_2', position: (12, 10), type: EnemyType.goblin, health: 50, weakness: SpellElement.fire, resistance: SpellElement.water, xpValue: 30),
+    ];
+  }
+
+  /// Resets the board and spawns the next wave of enemies.
+  void _startNextWave() {
+    final nextWaveNumber = state.waveNumber + 1;
+    final newEnemies = _waveDefinitions[nextWaveNumber] ?? [];
+
+    if (newEnemies.isEmpty) {
+      // No more waves defined, player wins the game.
+      state = state.copyWith(gameStatus: GameStatus.victory);
+      return;
+    }
+
+    // Reset player position but keep their stats
+    final player = state.player.copyWith(position: (0, 0));
+
+    // Re-initialize the grid to clear corpses and dropped items from SpaceType
+    final newGrid = List.generate(
+      GameState.defaultGridSize,
+      (_) => List.generate(GameState.defaultGridSize, (_) => SpaceType.empty),
+    );
+    _initializeGrid(newGrid);
+
+    // Reset to the initial set of items on the map
+    const initialItems = {
+      (1, 1): Item(id: 'item_hp_1', type: ItemType.healthPotion),
+      (8, 8): Item(id: 'item_mp_1', type: ItemType.manaPotion),
+      (15, 15): Item(id: 'item_hp_2', type: ItemType.healthPotion),
+    };
+
+    // Update the state for the new wave
+    state = state.copyWith(
+      player: player,
+      enemies: newEnemies,
+      waveNumber: nextWaveNumber,
+      itemsOnGrid: initialItems, // Reset to initial items
+      corpsesOnGrid: {}, // Clear corpses
+      terrainEffects: {}, // Clear effects
+      minions: [], // Clear minions from previous wave
+      grid: newGrid,
+      gameStatus: GameStatus.playing, // Ensure it stays playing
+    );
   }
 }

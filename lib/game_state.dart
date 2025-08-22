@@ -274,6 +274,7 @@ class GameState {
     this.playerDirection = Direction.up,
     required this.grid, // Grid is now a required property
     this.gameStatus = GameStatus.playing,
+    this.waveNumber = 1,
   });
 
   final int gridSize;
@@ -286,6 +287,7 @@ class GameState {
   final Direction playerDirection;
   final List<List<SpaceType>> grid; // Explicit grid representation
   final GameStatus gameStatus;
+  final int waveNumber;
 
   /// The currently selected spell element.
   final SpellElement selectedElement;
@@ -310,6 +312,7 @@ class GameState {
     Direction? playerDirection,
     List<List<SpaceType>>? grid,
     GameStatus? gameStatus,
+    int? waveNumber,
   }) {
     return GameState(
       gridSize: gridSize ?? this.gridSize,
@@ -324,6 +327,7 @@ class GameState {
       playerDirection: playerDirection ?? this.playerDirection,
       grid: grid ?? this.grid,
       gameStatus: gameStatus ?? this.gameStatus,
+      waveNumber: waveNumber ?? this.waveNumber,
     );
   }
 }
