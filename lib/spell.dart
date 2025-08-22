@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 enum SpellElement { fire, water, earth, air }
 
 /// Enum for spell shapes.
-enum SpellShape { ball, cone, wall, self }
+enum SpellShape { ball, cone, wall, self, summon, raiseDead }
 
 /// Data classes for defining spells.
 @immutable
